@@ -1,12 +1,12 @@
 # Abstract 
 
 By default Argo has ability to work with blobs on Google Storage 
-Due bad practices people tend to store many files in folders instead archives as blobs.
- GS API doesn't support recursive oparation. `gsutil` does iplement it.
+Due bad practices, people tend to store many files in folders instead archives as blobs.
+GS API doesn't support recursive oparation thus `gsutil` does iplemented it.
 
 # Example 
 
-This example will copy 'folder' on Google Storage on local persistent disk to process and store result back to Google storage.  
+This example will copy 'folder' on Google Storage to local persistent disk to process and store result back to Google storage.  
 
 # Prerequisites
 
