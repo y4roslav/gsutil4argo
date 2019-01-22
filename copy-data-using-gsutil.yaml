@@ -1,0 +1,127 @@
+################## Example for using gsutil image in Argo ##############
+# By default Argo has ability to work with blobs on Google Storage 
+# Due bad practices people tend to store many files in folders instead 
+# archives as blobs
+# GS API doesn't support recursive oparation. `gsutil` does iplement 
+# those 
+# This an example how to use it 
+# Example using for Copying data to pod, do something with it (ML training
+# in this example) and save it at another bucket 
+###################################################################### 
+
+apiVersion: argoproj.io/v1alpha1 
+kind: Workflow 
+metadata: 
+  generateName: gsutil-multiple-copy- 
+spec: 
+  entrypoint: start 
+#  onExit: exit-handler 
+  volumeClaimTemplates:   #define volume, same syntax as k8s Pod spec 
+  - metadata: 
+      name: workdir       #name of volume claim 
+    spec: 
+      accessModes: [ "ReadWriteOnce" ] 
+      resources: 
+        requests: 
+          storage: 300Gi 
+  volumes: 
+  - name: gs-secret 
+    secret: 
+      secretName: gsutil-secret 
+
+################################### 
+######## GLOBAL CONFIGURAION ###### 
+################################### 
+  arguments: 
+    parameters: 
+  #### GCP SETTING ################# 
+    - name: gcp-project-id
+      value: project-name
+#### EXECUTION IMAGES ############
+    - name: gs-image
+      value: path/to/image/registry/gsutil:verion
+#### TRAIN IMAGE #################
+    - name: train-image
+      value: path/to/image/registry/train:verion
+#### Step: DATA LOCATION  ########
+    - name: data-path
+      value: gs://data-in
+    - name: output-path
+      value: gs://data-out
+#### DO SOMETHING ##############
+    - name: data-location
+      value: /local/data/
+
+##################################
+###### WORKFLOW SKELETON #########
+##################################
+
+  templates:
+  - name: start
+    steps: 
+    - - name: copy-data-from-storage
+        template: copy-data
+        arguments:
+          parameters:
+          - name: source
+            value: '{{workflow.parameters.data-path}}'
+          - name: destination
+            value: '{{workflow.parameters.data-location}}'
+    - - name: train
+        template: train
+    - - name: save-model
+        template: copy-data
+        arguments:
+          parameters:
+          - name: source
+            value: '{{workflow.parameters.data-location}}train_output'
+          - name: destination
+            value: '{{workflow.parameters.data-out}}'
+
+      
+#####################################################
+##### EXECUTION SECTION #############################
+##### MODIFICATION BELOW CAN AND WILL AFFECT ########
+##### WORKFLOW COMPATIBILITY ########################
+#####################################################
+
+
+############################################
+#######  Model Training ####################
+############################################
+
+  - name: copy-data
+    inputs:
+      parameters:
+      - name: source
+      - name: destination
+    container:
+      image: '{{workflow.parameters.gs-image}}'
+      env: 
+      - name: SRC_FOLDER
+        value: '{{inputs.parameters.source}}'
+      - name: DST_FOLDER
+        value: '{{inputs.parameters.destination}}'
+      volumeMounts:
+      - name: gs-secret
+        mountPath: /app/access/
+        readOnly: true
+      - name: workdir
+        mountPath: '{{workflow.parameters.data-location}}'
+
+  - name: train
+    nodeSelector:
+      pool: model
+    tolerations:
+    - key: "highcpu"
+      operator: "Exists"
+      effect: "NoSchedule"
+    container:
+      image: '{{workflow.parameters.train-image}}'
+      resources:
+        requests:
+          cpu: 38
+          memory: 64Gi
+      volumeMounts:
+      - name: workdir
+        mountPath: '{{workflow.parameters.data-location}}'
